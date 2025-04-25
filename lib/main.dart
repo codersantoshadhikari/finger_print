@@ -12,156 +12,150 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Fingerprint Auth Demo',
+      debugShowCheckedModeBanner: false,
+      title: 'Biometric Auth',
       theme: ThemeData(
         primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: const FingerprintAuthScreen(),
+      home: const AuthScreen(),
     );
   }
 }
 
-class FingerprintAuthScreen extends StatefulWidget {
-  const FingerprintAuthScreen({super.key});
+class AuthScreen extends StatefulWidget {
+  const AuthScreen({super.key});
 
   @override
-  State<FingerprintAuthScreen> createState() => _FingerprintAuthScreenState();
+  State<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _FingerprintAuthScreenState extends State<FingerprintAuthScreen> {
-  final LocalAuthentication _localAuth = LocalAuthentication();
+class _AuthScreenState extends State<AuthScreen> {
+  final LocalAuthentication auth = LocalAuthentication();
   bool _canCheckBiometrics = false;
   List<BiometricType> _availableBiometrics = [];
-  String _authorized = 'Not Authorized';
+  String _authStatus = 'Not Authenticated';
   bool _isAuthenticating = false;
 
   @override
   void initState() {
     super.initState();
-    _checkBiometrics();
+    _initBiometrics();
   }
 
-  Future<void> _checkBiometrics() async {
-    bool canCheckBiometrics;
+  Future<void> _initBiometrics() async {
     try {
-      canCheckBiometrics = await _localAuth.canCheckBiometrics;
+      final bool canAuthenticate = await auth.canCheckBiometrics;
+      final List<BiometricType> biometrics =
+          await auth.getAvailableBiometrics();
+
+      if (!mounted) return;
+
+      setState(() {
+        _canCheckBiometrics = canAuthenticate;
+        _availableBiometrics = biometrics;
+      });
     } on PlatformException catch (e) {
-      canCheckBiometrics = false;
-      debugPrint('Error checking biometrics: $e');
+      debugPrint('Error initializing biometrics: ${e.message}');
     }
-    if (!mounted) return;
-
-    setState(() {
-      _canCheckBiometrics = canCheckBiometrics;
-    });
-
-    if (canCheckBiometrics) {
-      _getAvailableBiometrics();
-    }
-  }
-
-  Future<void> _getAvailableBiometrics() async {
-    List<BiometricType> availableBiometrics;
-    try {
-      availableBiometrics = await _localAuth.getAvailableBiometrics();
-    } on PlatformException catch (e) {
-      availableBiometrics = [];
-      debugPrint('Error getting biometrics: $e');
-    }
-    if (!mounted) return;
-
-    setState(() {
-      _availableBiometrics = availableBiometrics;
-    });
   }
 
   Future<void> _authenticate() async {
-    bool authenticated = false;
     try {
       setState(() {
         _isAuthenticating = true;
-        _authorized = 'Authenticating...';
+        _authStatus = 'Authenticating...';
       });
-      
-      authenticated = await _localAuth.authenticate(
-        localizedReason: 'Scan your fingerprint to authenticate',
+
+      final bool didAuthenticate = await auth.authenticate(
+        localizedReason: 'Authenticate to access secure content',
         options: const AuthenticationOptions(
-          stickyAuth: true,
           biometricOnly: true,
+          stickyAuth: true,
         ),
       );
-      
+
+      if (!mounted) return;
+
       setState(() {
+        _authStatus =
+            didAuthenticate
+                ? 'Authenticated Successfully! ✅'
+                : 'Authentication Failed ❌';
         _isAuthenticating = false;
       });
     } on PlatformException catch (e) {
-      debugPrint('Authentication error: $e');
+      debugPrint('Authentication error: ${e.message}');
       setState(() {
+        _authStatus = 'Error: ${e.message}';
         _isAuthenticating = false;
-        _authorized = 'Error: ${e.message}';
       });
-      return;
     }
-    if (!mounted) return;
-
-    setState(() {
-      _authorized = authenticated ? 'Authorized ✅' : 'Not Authorized ❌';
-    });
-  }
-
-  Future<void> _cancelAuthentication() async {
-    await _localAuth.stopAuthentication();
-    setState(() {
-      _isAuthenticating = false;
-      _authorized = 'Authentication canceled';
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Fingerprint Authentication'),
+        title: const Text('Biometric Authentication'),
+        centerTitle: true,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.fingerprint, size: 80, color: Colors.blue),
-            const SizedBox(height: 30),
-            Text(
-              'Biometrics available: ${_canCheckBiometrics ? 'Yes' : 'No'}',
-              style: const TextStyle(fontSize: 16),
-            ),
-            Text(
-              'Supported methods: ${_availableBiometrics.join(", ")}',
-              style: const TextStyle(fontSize: 16),
-            ),
-            const SizedBox(height: 30),
-            Text(
-              'Status: $_authorized',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 40),
-            if (_isAuthenticating)
-              ElevatedButton(
-                onPressed: _cancelAuthentication,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                child: const Text('CANCEL AUTHENTICATION'),
-              )
-            else
-              ElevatedButton(
-                onPressed: _authenticate,
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                child: const Text('AUTHENTICATE WITH FINGERPRINT'),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.fingerprint, size: 80, color: Colors.blue),
+              const SizedBox(height: 40),
+              Text(
+                'Biometrics Supported: ${_canCheckBiometrics ? 'Yes' : 'No'}',
+                style: const TextStyle(fontSize: 18),
               ),
-          ],
+              const SizedBox(height: 10),
+              Text(
+                'Available Methods: ${_availableBiometrics.join(", ")}',
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 30),
+              Text(
+                _authStatus,
+                style: TextStyle(
+                  fontSize: 20,
+                  color:
+                      _authStatus.contains('Success')
+                          ? Colors.green
+                          : Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 40),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child:
+                    _isAuthenticating
+                        ? ElevatedButton(
+                          onPressed: () async {
+                            await auth.stopAuthentication();
+                            setState(() {
+                              _isAuthenticating = false;
+                              _authStatus = 'Authentication Canceled';
+                            });
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                          ),
+                          child: const Text('CANCEL'),
+                        )
+                        : ElevatedButton(
+                          onPressed: _authenticate,
+                          child: const Text('AUTHENTICATE'),
+                        ),
+              ),
+            ],
+          ),
         ),
       ),
     );
